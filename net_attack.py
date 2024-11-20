@@ -9,7 +9,7 @@ def main():
     print("-" * 70)        
     
     parser = argparse.ArgumentParser(prog="net_attack.py", description="Read User Arguments"
-                                     , epilog="Author: Orla Dolan")
+                                     , epilog="Author: Orla Dolan",)
 
     parser.add_argument(
         "-u", "--username", 
@@ -36,8 +36,18 @@ def main():
         help="Specify the password list filename."
     )
 
+    # Check if arguments are provided
+    if len(sys.argv) == 1:
+        parser.print_help()  
+        sys.exit(1)
+
     # Parsing the arguments to a variable
-    args = parser.parse_args()
+    try:
+        args = parser.parse_args()  
+    except SystemExit: # Catches SystemExit raised by argparse due to missing required values
+        parser.print_help()
+        sys.exit(1)
+
 
     # Display parsed arguments on console
     print(f"Target IP Address: {args.target}") # f-string to include variable in string
