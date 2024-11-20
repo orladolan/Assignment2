@@ -2,6 +2,21 @@
 import argparse
 import os
 import sys
+from scapy.all import ICMP, IP, sr1
+
+# Question 2: Connectivity
+def checkConnectivity(target_ip):
+    # Creates the packet
+    packet = IP(dst=target_ip)/ICMP()
+
+    # Sends the packet and waits for a reply 
+    reply = sr1(packet, timeout=5, verbose=0) # verbosity set to 0 to avoid unnecessary output
+
+    if reply:  
+        return True # If a reply does come back
+    else:
+        return False
+
 
 # Question 1: Argparse
 def main():
@@ -47,6 +62,14 @@ def main():
     except SystemExit: # Catches SystemExit raised by argparse due to missing required values
         parser.print_help()
         sys.exit(1)
+
+    # Task 2: Connectivity Check
+    print("\nChecking connectivity to the target IP...")
+    if not checkConnectivity(args.target): # if false
+        print(f"Error: Target {args.target} is unreachable.")
+        sys.exit(1)
+    else:
+        print(f"Success: Target {args.target} is reachable.")    
 
 
     # Display parsed arguments on console
