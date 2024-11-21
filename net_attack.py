@@ -3,6 +3,8 @@ import argparse
 import os
 import sys
 from scapy.all import ICMP, IP, sr1, TCP
+import socket
+import requests
 
 # Question 2: Connectivity
 
@@ -65,14 +67,63 @@ def scanPorts(target_ip, target_ports):
             if tcp_response.flags == 0x12:  # SYN-ACK (bitwise mask)
                 print(f"{port:<8}{'Open':<12}{service}")
 
+                if port == 22:
+                    confirmSSH(target_ip)
+                elif port == 80:
+                    confirmHTTP(target_ip)
+
             elif tcp_response.flags == 0x14:  # RST-ACK (bitwise mask)
                 print(f"{port:<8}{'Closed':<12}{service}")
         
         else:  # Unknown response
             print(f"{port:<8}{'Unknown':<12}{service}")
 
+        
 
 
+# Question 4: Confirm Service
+
+def confirmSSH(target_ip): # Connect to port 22
+    try:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM) # New socket object for IPv4 TCP communication
+        sock.settimeout(5)  # Set timeout to avoid delays if the port is closed
+        sock.connect((target_ip, 22))
+        banner = sock.recv(1024).decode('utf-8', errors='ignore') # Grab the banner & recieve 1024 bytes of data
+        sock.close()
+        
+        if banner.startswith("SSH-"):
+            print(f"SSH service confirmed on {target_ip}:22")
+            print()
+            return True
+        else:
+            print(f"No SSH banner found on {target_ip}:22")
+            print()
+            return False
+   
+    except (socket.timeout, socket.error):
+        print(f"Unable to connect to {target_ip}:22")
+        print()
+        return False
+    
+def confirmHTTP(target_ip):
+    try:
+        # Send a basic HTTP GET request to port 80
+        response = requests.get(f'http://{target_ip}', timeout=5)
+        
+        # Checking responses (200 is HTTP)
+        if response.status_code == 200:
+            print(f"HTTP service confirmed on {target_ip}:80")
+            print()
+            return True
+        else:
+            print(f"Non-200 HTTP response on {target_ip}:80 - Status Code: {response.status_code}")
+            print()
+            return False
+    
+    except requests.RequestException:
+        print(f"Unable to connect to {target_ip}:80")
+        print()
+        return False    
 
 
 # Question 1: Argparse
