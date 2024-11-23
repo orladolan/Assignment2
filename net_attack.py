@@ -114,6 +114,7 @@ def confirmHTTP(target_ip):
         if response.status_code == 200:
             print(f"HTTP service confirmed on {target_ip}:80")
             print()
+            dirBuster(target_ip) # Question 5 addition to call Directory Buster
             return True
         else:
             print(f"Non-200 HTTP response on {target_ip}:80 - Status Code: {response.status_code}")
@@ -124,6 +125,35 @@ def confirmHTTP(target_ip):
         print(f"Unable to connect to {target_ip}:80")
         print()
         return False    
+    
+# Question 5: Directory Busting
+def dirBuster(target_ip):
+    print("\n[-] Starting directory busting for open port 80...")
+    print("-" * 50)
+    pages = [
+        "login.php",
+        "admin.php",
+        "admin/login.php",
+        "admin/admin.php",
+    ] # Defines the pages to be checked
+
+    for page in pages:
+        url = f"http://{target_ip}/{page}" # Creates URL using target IP and checks for each page
+        try:
+            response = requests.get(url, timeout=5)
+            if response.status_code == 200: # Successful status code
+                print(f"[+] Accessible: {url}")
+                if "<form" in response.text.lower(): # Checks if form is present
+                    print(f"    [+] HTML form found on: {url}")
+                    print()
+                else:
+                    print(f"    [-] No HTML form found on: {url}")
+                    print()
+            else:
+                print(f"[-] Not accessible: {url} (Status Code: {response.status_code})")
+        except requests.RequestException as e:
+            print(f"[-] Error accessing {url}: {e}")
+    print()
 
 
 # Question 1: Argparse
